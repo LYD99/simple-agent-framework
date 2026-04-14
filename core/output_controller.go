@@ -22,6 +22,12 @@ type OutputController struct {
 	AutoRetryTimes int
 }
 
+
+type OutputParser struct{
+	
+}
+
+
 // NewOutputController creates a new instance.
 // schema: can be an instance of a struct (MyStruct{}), a slice ([]int{}), or basic types (0, "", false).
 func NewOutputController(schema interface{}, v *validator.Validate) *OutputController {

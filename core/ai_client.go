@@ -95,21 +95,38 @@ func (c *AIClient) Generate(input interface{}, fn func(map[string]interface{}) (
 	return content, usage, nil
 }
 
-func (c *AIClient) Stream(input interface{}, fn func(map[string]interface{}) (StreamMessage, error)) (<-chan StreamMessage, error) {
-	c.StreamRequest(input, func(raw map[string]interface{}) error {
-		messages, err := fn(raw)
-		if err != nil {
-			return err
-		}
-		for _, msg := range messages {
-			messageChan <- msg
-		}
-		if usage != nil {
-			usageChan <- usage
-		}
-		return nil
-	})
-	return messageChan, usageChan, errorChan
+func (c *AIClient) Stream(input interface{}, fn func(map[string]interface{}) ([]StreamMessage, error)) (*StreamResponse, error) {
+    // 缓冲大小可根据需求调整，建议给一定缓冲防止阻塞 API 接收
+    msgChan := make(chan StreamMessage, 128)
+    errChan := make(chan error, 1)
+
+    // 启动后台协程处理请求
+    go func() {
+        defer close(msgChan)
+        defer close(errChan)
+
+        err := c.StreamRequest(input, func(raw map[string]interface{}) error {
+            // 注意：这里根据你传入的 fn 解析 raw 数据
+            messages, err := fn(raw)
+            if err != nil {
+                return err
+            }
+            // 将解析后的碎片写入通道
+            for _, msg := range messages {
+                msgChan <- msg
+            }
+            return nil
+        })
+
+        if err != nil {
+            errChan <- err
+        }
+    }()
+
+    return &StreamResponse{
+        msgChan: msgChan,
+        errChan: errChan,
+    }, nil
 }
 
 // Request performs the POST request and returns the content string and usage details.
