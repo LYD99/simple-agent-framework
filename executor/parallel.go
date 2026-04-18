@@ -5,8 +5,8 @@ import (
 	"sync"
 	"time"
 
-	"simple-agent-framework/planner"
-	"simple-agent-framework/tool"
+	"github.com/LYD99/simple-agent-framework/planner"
+	"github.com/LYD99/simple-agent-framework/tool"
 )
 
 type ParallelExecutor struct {

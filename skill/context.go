@@ -5,7 +5,7 @@ import (
 	"reflect"
 	"time"
 
-	"simple-agent-framework/model"
+	"github.com/LYD99/simple-agent-framework/model"
 )
 
 type SkillContext struct {
@@ -60,7 +60,7 @@ func asToolLike(v any) (toolLike, bool) {
 }
 
 type toolAdapter struct {
-	e      interface {
+	e interface {
 		Name() string
 		Description() string
 		Execute(ctx context.Context, input map[string]any) (string, error)
@@ -70,7 +70,7 @@ type toolAdapter struct {
 
 func (a *toolAdapter) Name() string        { return a.e.Name() }
 func (a *toolAdapter) Description() string { return a.e.Description() }
-func (a *toolAdapter) Schema() any           { return a.schema }
+func (a *toolAdapter) Schema() any         { return a.schema }
 func (a *toolAdapter) Execute(ctx context.Context, input map[string]any) (string, error) {
 	return a.e.Execute(ctx, input)
 }

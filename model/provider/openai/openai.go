@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"simple-agent-framework/model"
+	"github.com/LYD99/simple-agent-framework/model"
 )
 
 const defaultBaseURL = "https://api.openai.com/v1"
@@ -98,7 +98,7 @@ type functionCallIn struct {
 }
 
 type chatTool struct {
-	Type     string         `json:"type"`
+	Type     string       `json:"type"`
 	Function toolFunction `json:"function"`
 }
 

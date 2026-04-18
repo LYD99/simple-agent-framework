@@ -10,7 +10,7 @@ import (
 	"strings"
 	"sync"
 
-	"simple-agent-framework/retriever"
+	"github.com/LYD99/simple-agent-framework/retriever"
 )
 
 type ChromaStore struct {
@@ -182,10 +182,10 @@ func (c *ChromaStore) Search(ctx context.Context, vector []float64, topK int) ([
 		return nil, fmt.Errorf("chroma query: %s: %s", resp.Status, string(raw))
 	}
 	var out struct {
-		IDs       [][]string              `json:"ids"`
-		Documents [][]string              `json:"documents"`
-		Metadatas [][]map[string]any      `json:"metadatas"`
-		Distances [][]float64             `json:"distances"`
+		IDs       [][]string         `json:"ids"`
+		Documents [][]string         `json:"documents"`
+		Metadatas [][]map[string]any `json:"metadatas"`
+		Distances [][]float64        `json:"distances"`
 	}
 	if err := json.Unmarshal(raw, &out); err != nil {
 		return nil, err

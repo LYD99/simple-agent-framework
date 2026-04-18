@@ -19,8 +19,8 @@ const (
 type E2BConfig struct {
 	APIKey     string
 	TemplateID string
-	APIBaseURL string        // defaults to https://api.e2b.app
-	Timeout    int           // sandbox TTL in seconds (default 300)
+	APIBaseURL string // defaults to https://api.e2b.app
+	Timeout    int    // sandbox TTL in seconds (default 300)
 	EnvVars    map[string]string
 	HTTPClient *http.Client
 }

@@ -1,4 +1,4 @@
-module simple-agent-framework
+module github.com/LYD99/simple-agent-framework
 
 go 1.24
 

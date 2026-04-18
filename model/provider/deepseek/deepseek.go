@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"time"
 
-	"simple-agent-framework/model/provider/openai"
+	"github.com/LYD99/simple-agent-framework/model/provider/openai"
 )
 
 const defaultBaseURL = "https://api.deepseek.com/v1"

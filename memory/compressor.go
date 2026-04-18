@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strings"
 
-	"simple-agent-framework/model"
+	"github.com/LYD99/simple-agent-framework/model"
 )
 
 const DefaultToolResultMaxLen = 30000

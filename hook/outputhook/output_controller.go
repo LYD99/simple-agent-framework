@@ -12,7 +12,7 @@ import (
 	"github.com/go-playground/validator/v10"
 	"github.com/tailscale/hujson"
 
-	agenterrs "simple-agent-framework/errors"
+	agenterrs "github.com/LYD99/simple-agent-framework/errors"
 )
 
 // OutputController handles the extraction, repair, and validation of LLM outputs.

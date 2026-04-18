@@ -6,7 +6,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"simple-agent-framework/tool"
+	"github.com/LYD99/simple-agent-framework/tool"
 )
 
 type WriteTool struct{}

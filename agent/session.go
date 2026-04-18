@@ -5,10 +5,10 @@ import (
 	"crypto/rand"
 	"fmt"
 
-	"simple-agent-framework/memory"
-	"simple-agent-framework/model"
-	"simple-agent-framework/planner"
-	"simple-agent-framework/prompt"
+	"github.com/LYD99/simple-agent-framework/memory"
+	"github.com/LYD99/simple-agent-framework/model"
+	"github.com/LYD99/simple-agent-framework/planner"
+	"github.com/LYD99/simple-agent-framework/prompt"
 )
 
 // Session holds per-request/conversation state, isolated from other sessions.

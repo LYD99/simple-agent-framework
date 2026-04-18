@@ -7,7 +7,7 @@ import (
 	"regexp"
 	"strings"
 
-	"simple-agent-framework/model"
+	"github.com/LYD99/simple-agent-framework/model"
 )
 
 const defaultLLMJudgePrompt = `You evaluate agent execution progress. Judge whether the task is on track.

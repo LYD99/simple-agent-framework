@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"simple-agent-framework/planner"
+	"github.com/LYD99/simple-agent-framework/planner"
 )
 
 type Executor interface {

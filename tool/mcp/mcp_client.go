@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"simple-agent-framework/tool"
+	"github.com/LYD99/simple-agent-framework/tool"
 )
 
 type MCPTool struct {
@@ -89,9 +89,9 @@ func (t *MCPTool) Execute(ctx context.Context, input map[string]any) (string, er
 }
 
 type discoverToolMeta struct {
-	Name        string                `json:"name"`
-	Description string                `json:"description"`
-	Schema      *tool.SchemaProperty  `json:"schema"`
+	Name        string               `json:"name"`
+	Description string               `json:"description"`
+	Schema      *tool.SchemaProperty `json:"schema"`
 }
 
 type discoverEnvelope struct {

@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 
-	"simple-agent-framework/tool"
+	"github.com/LYD99/simple-agent-framework/tool"
 )
 
 type RuleViewTool struct {

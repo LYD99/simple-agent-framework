@@ -3,7 +3,7 @@ package vectorstore
 import (
 	"context"
 
-	"simple-agent-framework/retriever"
+	"github.com/LYD99/simple-agent-framework/retriever"
 )
 
 type VectorStore interface {

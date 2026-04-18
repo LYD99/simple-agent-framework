@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"os"
 
-	"simple-agent-framework/agent"
-	"simple-agent-framework/model/provider/openai"
-	"simple-agent-framework/tool"
+	"github.com/LYD99/simple-agent-framework/agent"
+	"github.com/LYD99/simple-agent-framework/model/provider/openai"
+	"github.com/LYD99/simple-agent-framework/tool"
 )
 
 func main() {

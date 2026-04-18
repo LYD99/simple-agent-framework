@@ -3,7 +3,7 @@ package interrupter
 import (
 	"context"
 
-	"simple-agent-framework/planner"
+	"github.com/LYD99/simple-agent-framework/planner"
 )
 
 type InterruptType int

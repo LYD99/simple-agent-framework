@@ -6,7 +6,7 @@ import (
 	"strings"
 	"sync"
 
-	"simple-agent-framework/model"
+	"github.com/LYD99/simple-agent-framework/model"
 )
 
 // SummaryCallback is invoked whenever SummaryMemory compresses old messages

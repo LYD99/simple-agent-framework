@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"simple-agent-framework/planner"
+	"github.com/LYD99/simple-agent-framework/planner"
 )
 
 // ApprovalFunc 审批回调函数类型

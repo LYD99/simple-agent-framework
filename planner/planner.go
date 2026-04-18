@@ -3,7 +3,7 @@ package planner
 import (
 	"context"
 
-	"simple-agent-framework/model"
+	"github.com/LYD99/simple-agent-framework/model"
 )
 
 type Planner interface {

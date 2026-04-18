@@ -18,7 +18,7 @@ const (
 	EventError
 	EventStreamChunk
 	EventSkillContextLog
-	EventRuleView      // 渐进式披露：模型按需加载 rule 完整内容
+	EventRuleView       // 渐进式披露：模型按需加载 rule 完整内容
 	EventSkillCallStart // 模型调用 skill_call 开始
 	EventSkillCallDone  // skill_call 执行完成
 )

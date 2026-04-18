@@ -5,7 +5,7 @@ import (
 	"slices"
 	"sync"
 
-	"simple-agent-framework/model"
+	"github.com/LYD99/simple-agent-framework/model"
 )
 
 type BufferMemory struct {

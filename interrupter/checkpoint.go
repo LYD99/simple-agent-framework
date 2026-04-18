@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"sync"
 
-	"simple-agent-framework/model"
-	"simple-agent-framework/planner"
+	"github.com/LYD99/simple-agent-framework/model"
+	"github.com/LYD99/simple-agent-framework/planner"
 )
 
 // AgentSnapshot Agent 运行快照

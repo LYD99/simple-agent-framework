@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	"simple-agent-framework/tool"
+	"github.com/LYD99/simple-agent-framework/tool"
 )
 
 type ResultFormatter interface {

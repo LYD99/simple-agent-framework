@@ -1,6 +1,6 @@
 # Simple Agent Framework — 技术设计文档 (TD)
 
-> 版本: v1.4 | 模块: `simple-agent-framework` | Go 1.24+
+> 版本: v1.4 | 模块: `github.com/LYD99/simple-agent-framework` | Go 1.24+
 
 ---
 
@@ -81,7 +81,7 @@
 ## 三、包结构设计
 
 ```
-simple-agent-framework/
+github.com/LYD99/simple-agent-framework/
 ├── go.mod
 ├── agent/                     # 核心 Agent 包 (public API)
 │   ├── agent.go               # Agent struct (共享单例, DI 注入)

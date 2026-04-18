@@ -7,20 +7,20 @@ import (
 	"sync"
 	"time"
 
-	agenterrs "simple-agent-framework/errors"
-	"simple-agent-framework/evaluator"
-	"simple-agent-framework/executor"
-	"simple-agent-framework/hook"
-	"simple-agent-framework/hook/outputhook"
-	"simple-agent-framework/interrupter"
-	"simple-agent-framework/memory"
-	"simple-agent-framework/model"
-	"simple-agent-framework/planner"
-	"simple-agent-framework/prompt"
-	"simple-agent-framework/rule"
-	"simple-agent-framework/skill"
-	"simple-agent-framework/tool"
-	"simple-agent-framework/tool/builtin"
+	agenterrs "github.com/LYD99/simple-agent-framework/errors"
+	"github.com/LYD99/simple-agent-framework/evaluator"
+	"github.com/LYD99/simple-agent-framework/executor"
+	"github.com/LYD99/simple-agent-framework/hook"
+	"github.com/LYD99/simple-agent-framework/hook/outputhook"
+	"github.com/LYD99/simple-agent-framework/interrupter"
+	"github.com/LYD99/simple-agent-framework/memory"
+	"github.com/LYD99/simple-agent-framework/model"
+	"github.com/LYD99/simple-agent-framework/planner"
+	"github.com/LYD99/simple-agent-framework/prompt"
+	"github.com/LYD99/simple-agent-framework/rule"
+	"github.com/LYD99/simple-agent-framework/skill"
+	"github.com/LYD99/simple-agent-framework/tool"
+	"github.com/LYD99/simple-agent-framework/tool/builtin"
 )
 
 const DefaultModelMaxTokens = 128000
@@ -59,8 +59,8 @@ type Agent struct {
 	outputSchema any
 	autoRetry    int
 
-	builtinRuleViewRegistered      bool
-	builtinSkillCallRegistered     bool
+	builtinRuleViewRegistered        bool
+	builtinSkillCallRegistered       bool
 	builtinFetchFullResultRegistered bool
 
 	// --- shared config (determines Session defaults) ---

@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strings"
 
-	"simple-agent-framework/model"
+	"github.com/LYD99/simple-agent-framework/model"
 )
 
 const defaultReActSystem = `You are a ReAct agent. Reason step by step in your visible text, call tools when you need external actions or data, and give a concise final answer in plain text when the task is done.`

@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"simple-agent-framework/model"
+	"github.com/LYD99/simple-agent-framework/model"
 )
 
 const defaultBaseURL = "https://api.anthropic.com/v1"
@@ -72,15 +72,15 @@ func (c *Client) messagesURL() string {
 // --- request / response types ---
 
 type messagesRequest struct {
-	Model         string              `json:"model"`
-	MaxTokens     int                 `json:"max_tokens"`
-	System        string              `json:"system,omitempty"`
-	Messages      []anthropicReqMsg   `json:"messages"`
-	Tools         []anthropicTool     `json:"tools,omitempty"`
-	Stream        bool                `json:"stream,omitempty"`
-	Temperature   *float64            `json:"temperature,omitempty"`
-	TopP          *float64            `json:"top_p,omitempty"`
-	StopSequences []string            `json:"stop_sequences,omitempty"`
+	Model         string            `json:"model"`
+	MaxTokens     int               `json:"max_tokens"`
+	System        string            `json:"system,omitempty"`
+	Messages      []anthropicReqMsg `json:"messages"`
+	Tools         []anthropicTool   `json:"tools,omitempty"`
+	Stream        bool              `json:"stream,omitempty"`
+	Temperature   *float64          `json:"temperature,omitempty"`
+	TopP          *float64          `json:"top_p,omitempty"`
+	StopSequences []string          `json:"stop_sequences,omitempty"`
 }
 
 type anthropicReqMsg struct {
@@ -95,10 +95,10 @@ type anthropicTool struct {
 }
 
 type messagesResponse struct {
-	Role       string          `json:"role"`
-	Content    []contentBlock  `json:"content"`
-	StopReason string          `json:"stop_reason"`
-	Usage      anthropicUsage  `json:"usage"`
+	Role       string         `json:"role"`
+	Content    []contentBlock `json:"content"`
+	StopReason string         `json:"stop_reason"`
+	Usage      anthropicUsage `json:"usage"`
 }
 
 type contentBlock struct {
@@ -410,8 +410,8 @@ func (c *Client) Stream(ctx context.Context, messages []model.ChatMessage, opts 
 				}
 			case "content_block_start":
 				var ev struct {
-					Index         int `json:"index"`
-					ContentBlock  struct {
+					Index        int `json:"index"`
+					ContentBlock struct {
 						Type string `json:"type"`
 						ID   string `json:"id"`
 						Name string `json:"name"`

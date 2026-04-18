@@ -1,6 +1,6 @@
 package agent
 
-import "simple-agent-framework/hook"
+import "github.com/LYD99/simple-agent-framework/hook"
 
 type PlanStartPayload = hook.PlanStartPayload
 

@@ -1,4 +1,4 @@
-// Package main demonstrates the full feature set of simple-agent-framework.
+// Package main demonstrates the full feature set of github.com/LYD99/simple-agent-framework.
 //
 // Features covered:
 //   - Model: DeepSeek provider (deepseek-chat)
@@ -20,7 +20,7 @@
 // Usage:
 //
 //	export DEEPSEEK_API_KEY=sk-...
-//	cd simple-agent-framework
+//	cd github.com/LYD99/simple-agent-framework
 //	go run ./examples/comprehensive/
 package main
 
@@ -35,23 +35,23 @@ import (
 	"strings"
 	"time"
 
-	"simple-agent-framework/agent"
-	"simple-agent-framework/evaluator"
-	"simple-agent-framework/hook"
-	"simple-agent-framework/interrupter"
-	"simple-agent-framework/memory"
-	"simple-agent-framework/model"
-	"simple-agent-framework/model/provider/anthropic"
-	"simple-agent-framework/model/provider/deepseek"
-	"simple-agent-framework/model/provider/openai"
-	"simple-agent-framework/planner"
-	"simple-agent-framework/retriever"
-	"simple-agent-framework/rule"
-	"simple-agent-framework/runtime"
-	"simple-agent-framework/skill"
-	"simple-agent-framework/tool"
-	"simple-agent-framework/tool/builtin"
-	"simple-agent-framework/tool/mcp"
+	"github.com/LYD99/simple-agent-framework/agent"
+	"github.com/LYD99/simple-agent-framework/evaluator"
+	"github.com/LYD99/simple-agent-framework/hook"
+	"github.com/LYD99/simple-agent-framework/interrupter"
+	"github.com/LYD99/simple-agent-framework/memory"
+	"github.com/LYD99/simple-agent-framework/model"
+	"github.com/LYD99/simple-agent-framework/model/provider/anthropic"
+	"github.com/LYD99/simple-agent-framework/model/provider/deepseek"
+	"github.com/LYD99/simple-agent-framework/model/provider/openai"
+	"github.com/LYD99/simple-agent-framework/planner"
+	"github.com/LYD99/simple-agent-framework/retriever"
+	"github.com/LYD99/simple-agent-framework/rule"
+	"github.com/LYD99/simple-agent-framework/runtime"
+	"github.com/LYD99/simple-agent-framework/skill"
+	"github.com/LYD99/simple-agent-framework/tool"
+	"github.com/LYD99/simple-agent-framework/tool/builtin"
+	"github.com/LYD99/simple-agent-framework/tool/mcp"
 )
 
 // ── Output schema for Demo 7 ─────────────────────────────────────────────────

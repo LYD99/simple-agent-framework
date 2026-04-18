@@ -3,15 +3,15 @@ package agent
 import (
 	"time"
 
-	"simple-agent-framework/evaluator"
-	"simple-agent-framework/hook"
-	"simple-agent-framework/interrupter"
-	"simple-agent-framework/memory"
-	"simple-agent-framework/model"
-	"simple-agent-framework/planner"
-	"simple-agent-framework/rule"
-	"simple-agent-framework/skill"
-	"simple-agent-framework/tool"
+	"github.com/LYD99/simple-agent-framework/evaluator"
+	"github.com/LYD99/simple-agent-framework/hook"
+	"github.com/LYD99/simple-agent-framework/interrupter"
+	"github.com/LYD99/simple-agent-framework/memory"
+	"github.com/LYD99/simple-agent-framework/model"
+	"github.com/LYD99/simple-agent-framework/planner"
+	"github.com/LYD99/simple-agent-framework/rule"
+	"github.com/LYD99/simple-agent-framework/skill"
+	"github.com/LYD99/simple-agent-framework/tool"
 )
 
 type AgentOption func(*Agent)
