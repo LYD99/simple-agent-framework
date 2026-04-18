@@ -18,15 +18,15 @@ func (t *WriteTool) Name() string {
 }
 
 func (t *WriteTool) Description() string {
-	return "写入文件内容，若父目录不存在则自动创建"
+	return "Write content to a file, creating parent directories if they do not exist."
 }
 
 func (t *WriteTool) Schema() *tool.SchemaProperty {
 	return &tool.SchemaProperty{
 		Type: "object",
 		Properties: map[string]*tool.SchemaProperty{
-			"path":    {Type: "string", Description: "文件路径"},
-			"content": {Type: "string", Description: "文件内容"},
+			"path":    {Type: "string", Description: "Target file path."},
+			"content": {Type: "string", Description: "File content to write."},
 		},
 		Required: []string{"path", "content"},
 	}

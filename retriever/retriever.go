@@ -2,12 +2,12 @@ package retriever
 
 import "context"
 
-// Retriever 统一检索接口
+// Retriever is the unified retrieval interface used by RAG pipelines.
 type Retriever interface {
 	Retrieve(ctx context.Context, query string, opts ...SearchOption) ([]Document, error)
 }
 
-// Document 检索结果文档
+// Document is a single retrieval result.
 type Document struct {
 	ID       string            `json:"id"`
 	Content  string            `json:"content"`
@@ -16,12 +16,12 @@ type Document struct {
 	Source   string            `json:"source,omitempty"`
 }
 
-// SearchOptions 检索参数
+// SearchOptions describes the retrieval parameters.
 type SearchOptions struct {
-	TopK       int               // 返回数量 (默认 5)
-	MinScore   float64           // 最低分数阈值
-	Filters    map[string]string // 元数据过滤
-	Collection string            // 知识库/集合名称
+	TopK       int               // Max number of results (default 5).
+	MinScore   float64           // Minimum score threshold.
+	Filters    map[string]string // Metadata filters.
+	Collection string            // Knowledge base / collection name.
 }
 
 // SearchOption functional option

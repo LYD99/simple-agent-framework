@@ -22,15 +22,15 @@ func (t *SkillCallTool) Name() string {
 }
 
 func (t *SkillCallTool) Description() string {
-	return "按名称调用 Skill 并传入输入文本"
+	return "Invoke a Skill by name with the given input text."
 }
 
 func (t *SkillCallTool) Schema() *tool.SchemaProperty {
 	return &tool.SchemaProperty{
 		Type: "object",
 		Properties: map[string]*tool.SchemaProperty{
-			"name":  {Type: "string", Description: "Skill 名称"},
-			"input": {Type: "string", Description: "传给 Skill 的输入"},
+			"name":  {Type: "string", Description: "Name of the Skill to invoke."},
+			"input": {Type: "string", Description: "Input text passed to the Skill."},
 		},
 		Required: []string{"name", "input"},
 	}

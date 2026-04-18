@@ -17,7 +17,7 @@ type SandboxConfig struct {
 	Type       SandboxType
 	Image      string // Docker image (SandboxDocker)
 	WorkDir    string
-	GitRepo    string // Git 仓库路径 (SandboxWorktree)
+	GitRepo    string // Git repository path (used by SandboxWorktree).
 	BranchName string
 
 	// E2B specific

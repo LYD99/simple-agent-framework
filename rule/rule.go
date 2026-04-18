@@ -1,16 +1,18 @@
 package rule
 
-// Rule 规则接口 — 渐进式披露范式
+// Rule represents a guideline consumed by the agent via progressive disclosure.
 //
-// Frontmatter 格式 (同 Cursor Rule):
+// Frontmatter format (same as a Cursor Rule):
 //
 //	---
-//	description: 一句话摘要
+//	description: one-line summary
 //	alwaysApply: true
 //	---
 //
-// alwaysApply=true  → 完整内容直接注入 System Prompt
-// alwaysApply=false → 仅摘要出现在 catalog，模型按需调用 rule_view 加载
+// alwaysApply=true  → the full content is injected directly into the system prompt.
+// alwaysApply=false → only the summary appears in the catalog; the model must
+//
+//	call rule_view to load the full body on demand.
 type Rule interface {
 	Name() string
 	Description() string
@@ -18,7 +20,7 @@ type Rule interface {
 	AlwaysApply() bool
 }
 
-// FileRule 基于文件的 Rule 实现
+// FileRule is a file-backed Rule implementation.
 type FileRule struct {
 	name        string
 	description string

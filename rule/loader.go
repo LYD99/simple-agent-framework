@@ -52,7 +52,7 @@ func LoadDir(dirPath string) ([]Rule, error) {
 // FromFile parses a .md file with optional YAML frontmatter.
 //
 //	---
-//	description: 为AI生成技术方案时提供参考
+//	description: reference material for the AI when drafting technical plans
 //	alwaysApply: true
 //	---
 //	(rule body)

@@ -21,7 +21,9 @@ func NewSkillViewTool(basePath string) *SkillViewTool {
 }
 
 func (t *SkillViewTool) Name() string        { return "skill_view" }
-func (t *SkillViewTool) Description() string { return "读取当前 Skill 目录下的文件" }
+func (t *SkillViewTool) Description() string {
+	return "Read a file under the current Skill directory."
+}
 
 func (t *SkillViewTool) Schema() *tool.SchemaProperty {
 	return &tool.SchemaProperty{
@@ -29,7 +31,7 @@ func (t *SkillViewTool) Schema() *tool.SchemaProperty {
 		Properties: map[string]*tool.SchemaProperty{
 			"path": {
 				Type:        "string",
-				Description: "相对于 Skill 根目录的文件路径",
+				Description: "File path relative to the Skill root directory.",
 			},
 		},
 		Required: []string{"path"},

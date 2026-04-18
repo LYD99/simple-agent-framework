@@ -22,14 +22,14 @@ func (t *RuleViewTool) Name() string {
 }
 
 func (t *RuleViewTool) Description() string {
-	return "按名称查看规则的完整内容"
+	return "Fetch the full content of a rule by name."
 }
 
 func (t *RuleViewTool) Schema() *tool.SchemaProperty {
 	return &tool.SchemaProperty{
 		Type: "object",
 		Properties: map[string]*tool.SchemaProperty{
-			"name": {Type: "string", Description: "规则名称"},
+			"name": {Type: "string", Description: "Name of the rule to fetch."},
 		},
 		Required: []string{"name"},
 	}

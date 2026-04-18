@@ -10,7 +10,8 @@ import (
 	"github.com/LYD99/simple-agent-framework/planner"
 )
 
-// AgentSnapshot Agent 运行快照
+// AgentSnapshot captures the runtime state of a single Agent run, suitable
+// for checkpoint/resume scenarios.
 type AgentSnapshot struct {
 	RunID         string               `json:"run_id"`
 	Iteration     int                  `json:"iteration"`
@@ -20,12 +21,12 @@ type AgentSnapshot struct {
 	StepResults   []planner.StepResult `json:"step_results"`
 }
 
-// Serialize 序列化快照为 JSON
+// Serialize marshals the snapshot to JSON.
 func (s *AgentSnapshot) Serialize() ([]byte, error) {
 	return json.Marshal(s)
 }
 
-// Deserialize 从 JSON 恢复快照
+// Deserialize restores an AgentSnapshot from JSON.
 func Deserialize(data []byte) (*AgentSnapshot, error) {
 	var s AgentSnapshot
 	if err := json.Unmarshal(data, &s); err != nil {
@@ -34,14 +35,14 @@ func Deserialize(data []byte) (*AgentSnapshot, error) {
 	return &s, nil
 }
 
-// CheckpointStore 检查点存储接口
+// CheckpointStore persists and restores AgentSnapshots.
 type CheckpointStore interface {
 	Save(ctx context.Context, runID string, snapshot *AgentSnapshot) error
 	Load(ctx context.Context, runID string) (*AgentSnapshot, error)
 	Delete(ctx context.Context, runID string) error
 }
 
-// MemoryStore 内存检查点存储（开发/测试用）
+// MemoryStore is an in-process CheckpointStore intended for dev/test only.
 type MemoryStore struct {
 	data map[string][]byte
 	mu   sync.RWMutex

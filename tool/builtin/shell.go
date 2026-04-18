@@ -18,7 +18,7 @@ func (t *ShellTool) Name() string {
 }
 
 func (t *ShellTool) Description() string {
-	return "在可选工作目录下执行 Shell 命令，返回标准输出与标准错误合并后的文本"
+	return "Execute a shell command (optionally in a given working directory). Returns combined stdout and stderr."
 }
 
 func (t *ShellTool) Schema() *tool.SchemaProperty {
@@ -27,16 +27,16 @@ func (t *ShellTool) Schema() *tool.SchemaProperty {
 		Properties: map[string]*tool.SchemaProperty{
 			"command": {
 				Type:        "string",
-				Description: "要执行的命令名或可执行文件路径",
+				Description: "Command name or absolute path of the executable to run.",
 			},
 			"args": {
 				Type:        "array",
-				Description: "命令参数列表",
+				Description: "Arguments to pass to the command.",
 				Items:       &tool.SchemaProperty{Type: "string"},
 			},
 			"work_dir": {
 				Type:        "string",
-				Description: "工作目录，可选",
+				Description: "Working directory for the command (optional).",
 			},
 		},
 		Required: []string{"command"},

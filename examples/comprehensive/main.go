@@ -139,9 +139,11 @@ func main() {
 		agent.WithRecentToolResultTokens(2000),
 
 		// Per-session BufferMemory: each session gets its own isolated history.
+		// The MessageStore engine is an implementation detail of the factory;
+		// swap NewInMemoryMessageStore for Redis/SQL/Custom without any Agent-side change.
 		agent.WithMemoryFactory(func(sid string) memory.Memory {
 			fmt.Printf("  [factory] Creating BufferMemory for session %s\n", sid[:8])
-			return memory.NewBuffer(50)
+			return memory.NewBuffer(memory.NewInMemoryMessageStore(), 50)
 		}),
 
 		// Per-session InMemoryContentStore for large tool result persistence.
@@ -534,7 +536,7 @@ func main() {
 		// the model compresses the oldest head into a summary injected as system context.
 		// Callback fires each time compression runs so you can observe it.
 		agent.WithMemoryFactory(func(sid string) memory.Memory {
-			return memory.NewSummary(m, 8, memory.WithSummaryCallback(summaryCB))
+			return memory.NewSummary(memory.NewInMemoryMessageStore(), m, 8, memory.WithSummaryCallback(summaryCB))
 		}),
 	)
 
@@ -707,7 +709,7 @@ func main() {
 			MaxContextRatio: 0.80,
 		}),
 		agent.WithMemoryFactory(func(sid string) memory.Memory {
-			return memory.NewBuffer(200)
+			return memory.NewBuffer(memory.NewInMemoryMessageStore(), 200)
 		}),
 	)
 	fmt.Println("CompressAgentConfig.Model:           <same model as main agent>")
@@ -1000,7 +1002,7 @@ func main() {
 	section("Demo 20: API Completeness — Remaining Constructor Options")
 
 	// WithMemory: single shared Memory instance (vs per-session factory).
-	fixedMem := memory.NewBuffer(100)
+	fixedMem := memory.NewBuffer(memory.NewInMemoryMessageStore(), 100)
 	_ = agent.New(
 		agent.WithModel(stubModel),
 		agent.WithMemory(fixedMem),

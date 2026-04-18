@@ -2,7 +2,8 @@ package tool
 
 import "context"
 
-// Tool 工具接口 — 所有工具（内置、MCP、RAG、Skill）的统一抽象
+// Tool is the unified abstraction for every callable capability (built-in,
+// MCP, RAG, Skill, …).
 type Tool interface {
 	Name() string
 	Description() string

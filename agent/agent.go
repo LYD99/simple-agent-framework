@@ -4,6 +4,7 @@ import (
 	"context"
 	stderrors "errors"
 	"fmt"
+	"log"
 	"sync"
 	"time"
 
@@ -72,7 +73,13 @@ type Agent struct {
 	modelMaxTokens         int
 
 	// --- session-level resource factories ---
-	memoryFactory       MemoryFactory
+	// memoryFactory builds the per-session semantic Memory. The Memory
+	// implementation internally composes a memory.MessageStore data engine
+	// (InMemory / Redis / SQL / custom) — the Agent has no direct knowledge
+	// of the engine layer; it is fully owned by the factory.
+	memoryFactory MemoryFactory
+	// contentStoreFactory is the per-session engine for persisting truncated
+	// tool-result content. Follows the same pluggable-engine pattern.
 	contentStoreFactory ContentStoreFactory
 
 	// --- session management ---
@@ -112,12 +119,17 @@ func New(opts ...AgentOption) *Agent {
 }
 
 func (a *Agent) init() {
+	// Default MemoryFactory: BufferMemory on top of an in-process data engine.
+	// The warning reminds operators to plug a persistent engine in their own
+	// factory body (via memory.NewBuffer(redisStore, ...) etc.) for production.
 	if a.memoryFactory == nil {
+		log.Printf("[WARN] memory: no MemoryFactory configured; falling back to BufferMemory backed by InMemoryMessageStore. Messages will be lost on restart — supply WithMemoryFactory with a persistent MessageStore (Redis/SQL/custom) for production.")
 		a.memoryFactory = func(_ string) memory.Memory {
-			return memory.NewBuffer(100)
+			return memory.NewBuffer(memory.NewInMemoryMessageStore(), 100)
 		}
 	}
 	if a.contentStoreFactory == nil {
+		log.Printf("[WARN] memory: no ContentStoreFactory configured; falling back to InMemoryContentStore. Truncated tool content will be lost on restart.")
 		a.contentStoreFactory = func(_ string) memory.ContentStore {
 			return memory.NewInMemoryContentStore()
 		}

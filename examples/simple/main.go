@@ -13,29 +13,29 @@ import (
 func main() {
 	apiKey := os.Getenv("OPENAI_API_KEY")
 	if apiKey == "" {
-		fmt.Println("请设置 OPENAI_API_KEY 环境变量")
+		fmt.Println("Please set the OPENAI_API_KEY environment variable.")
 		return
 	}
 
 	registry := tool.NewToolRegistry()
-	registry.Register("get_weather", "获取城市天气", struct {
-		City string `json:"city" description:"城市名称" required:"true"`
+	registry.Register("get_weather", "Get the weather for a given city.", struct {
+		City string `json:"city" description:"City name" required:"true"`
 	}{}, func(input map[string]interface{}) (string, error) {
 		city := input["city"].(string)
-		return fmt.Sprintf("%s: 晴天, 25°C", city), nil
+		return fmt.Sprintf("%s: sunny, 25°C", city), nil
 	})
 
 	a := agent.New(
 		agent.WithModel(openai.New("gpt-4o", apiKey)),
 		agent.WithToolRegistry(registry),
 		agent.WithMaxIterations(5),
-		agent.WithSystemPrompt("你是一个有用的助手。"),
+		agent.WithSystemPrompt("You are a helpful assistant."),
 	)
 
-	result, err := a.Run(context.Background(), "上海今天天气怎么样？")
+	result, err := a.Run(context.Background(), "What is the weather in Shanghai today?")
 	if err != nil {
-		fmt.Printf("错误: %v\n", err)
+		fmt.Printf("error: %v\n", err)
 		return
 	}
-	fmt.Printf("回答: %s\n", result.Answer)
+	fmt.Printf("answer: %s\n", result.Answer)
 }

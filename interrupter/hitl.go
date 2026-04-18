@@ -9,13 +9,13 @@ import (
 	"github.com/LYD99/simple-agent-framework/planner"
 )
 
-// ApprovalFunc 审批回调函数类型
+// ApprovalFunc is the callback invoked to request a human approval decision.
 type ApprovalFunc func(event InterruptEvent) (*HumanResponse, error)
 
 type HITLConfig struct {
-	RequireApproval []string      // 需要审批的工具名列表 (空 = 全部需要)
-	AutoApproveRead bool          // 读取类操作自动通过
-	WaitTimeout     time.Duration // 等待人类响应超时
+	RequireApproval []string      // Tool names that require explicit approval (empty = all tools).
+	AutoApproveRead bool          // Auto-approve read-like tools based on name heuristics.
+	WaitTimeout     time.Duration // Maximum time to wait for the human response.
 }
 
 type HITLHandler struct {
@@ -59,7 +59,7 @@ func isReadClassTool(toolName string) bool {
 	if name == "" {
 		return false
 	}
-	// 常见读取/查询类工具命名启发式
+	// Heuristic list of read/query-style tool-name prefixes.
 	keywords := []string{
 		"read", "get", "list", "fetch", "query", "search", "retrieve", "lookup", "view", "download",
 	}

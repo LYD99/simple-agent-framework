@@ -1,16 +1,19 @@
 package skill
 
-// Skill 技能接口 — 操作手册 (SOP) 抽象
+// Skill is the interface for an operational playbook (SOP) — a reusable
+// procedure the agent can run on demand.
 //
-// Frontmatter 格式 (同 Rule):
+// Frontmatter format (same as Rule):
 //
 //	---
-//	description: 一句话摘要
+//	description: one-line summary
 //	alwaysApply: true
 //	---
 //
-// alwaysApply=true  → Instruction 直接注入 System Prompt
-// alwaysApply=false → 仅摘要出现在 catalog，模型调用 skill_call 创建 skill_context
+// alwaysApply=true  → Instruction is injected directly into the system prompt.
+// alwaysApply=false → Only the summary appears in the catalog; the model must
+//
+//	invoke skill_call to spin up an isolated skill_context.
 type Skill interface {
 	Name() string
 	Description() string
@@ -21,7 +24,7 @@ type Skill interface {
 	AlwaysApply() bool
 }
 
-// DirSkill 基于目录的 Skill 实现
+// DirSkill is a directory-backed Skill implementation.
 type DirSkill struct {
 	name        string
 	description string
@@ -32,7 +35,7 @@ type DirSkill struct {
 	alwaysApply bool
 }
 
-// Option DirSkill 配置选项
+// Option configures a DirSkill.
 type Option func(*DirSkill)
 
 func WithTools(tools ...any) Option {

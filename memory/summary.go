@@ -15,9 +15,16 @@ import (
 // summary text. Useful for observability/logging.
 type SummaryCallback func(before, after int, summary string)
 
+// summaryPromptTemplate is the default English prompt used by SummaryMemory.
+const summaryPromptTemplate = "Please compress the following conversation into a concise context description, preserving user goals, key findings, completed steps, and outstanding questions:\n\n%s"
+
+// SummaryMemory is a semantic Memory that summarizes the head of the history
+// once a message-count threshold is crossed. It delegates all message storage
+// to an underlying MessageStore data engine — the summary itself is kept in
+// an in-process field (summaries are small and regenerated as needed).
 type SummaryMemory struct {
-	mu        sync.RWMutex
-	messages  []model.ChatMessage
+	mu        sync.Mutex
+	store     MessageStore
 	summary   string
 	model     model.ChatModel
 	threshold int
@@ -30,27 +37,43 @@ func WithSummaryCallback(fn SummaryCallback) SummaryOption {
 	return func(sm *SummaryMemory) { sm.onSummary = fn }
 }
 
-func NewSummary(m model.ChatModel, threshold int, opts ...SummaryOption) *SummaryMemory {
-	sm := &SummaryMemory{model: m, threshold: threshold}
+// NewSummary constructs a SummaryMemory backed by the given MessageStore.
+// When the stored message count exceeds `threshold`, the oldest half is
+// summarized via `m` and the store is rewritten (Replace) to keep only the
+// recent tail; the summary is prepended as a system message on reads.
+func NewSummary(store MessageStore, m model.ChatModel, threshold int, opts ...SummaryOption) *SummaryMemory {
+	if store == nil {
+		store = NewInMemoryMessageStore()
+	}
+	sm := &SummaryMemory{store: store, model: m, threshold: threshold}
 	for _, opt := range opts {
 		opt(sm)
 	}
 	return sm
 }
 
+var _ Memory = (*SummaryMemory)(nil)
+
+// Store returns the underlying MessageStore.
+func (sm *SummaryMemory) Store() MessageStore { return sm.store }
+
 func (sm *SummaryMemory) Messages(ctx context.Context) ([]model.ChatMessage, error) {
-	_ = ctx
-	sm.mu.RLock()
-	defer sm.mu.RUnlock()
-	if sm.summary == "" {
-		return slicesClone(sm.messages), nil
+	raw, err := sm.store.List(ctx)
+	if err != nil {
+		return nil, err
 	}
-	out := make([]model.ChatMessage, 0, 1+len(sm.messages))
+	sm.mu.Lock()
+	summary := sm.summary
+	sm.mu.Unlock()
+	if summary == "" {
+		return raw, nil
+	}
+	out := make([]model.ChatMessage, 0, 1+len(raw))
 	out = append(out, model.ChatMessage{
 		Role:    model.RoleSystem,
-		Content: sm.summary,
+		Content: summary,
 	})
-	out = append(out, slicesClone(sm.messages)...)
+	out = append(out, raw...)
 	return out, nil
 }
 
@@ -58,15 +81,16 @@ func (sm *SummaryMemory) Add(ctx context.Context, msgs ...model.ChatMessage) err
 	if len(msgs) == 0 {
 		return nil
 	}
-	sm.mu.Lock()
-	sm.messages = append(sm.messages, msgs...)
-	sm.mu.Unlock()
+	if err := sm.store.Append(ctx, msgs...); err != nil {
+		return err
+	}
 	for sm.threshold > 0 {
-		sm.mu.RLock()
-		overflow := len(sm.messages) > sm.threshold
-		sm.mu.RUnlock()
-		if !overflow {
-			break
+		n, err := sm.store.Len(ctx)
+		if err != nil {
+			return err
+		}
+		if n <= sm.threshold {
+			return nil
 		}
 		if err := sm.summarize(ctx); err != nil {
 			return err
@@ -76,12 +100,10 @@ func (sm *SummaryMemory) Add(ctx context.Context, msgs ...model.ChatMessage) err
 }
 
 func (sm *SummaryMemory) Clear(ctx context.Context) error {
-	_ = ctx
 	sm.mu.Lock()
-	defer sm.mu.Unlock()
-	sm.messages = nil
 	sm.summary = ""
-	return nil
+	sm.mu.Unlock()
+	return sm.store.Clear(ctx)
 }
 
 func (sm *SummaryMemory) summarize(ctx context.Context) error {
@@ -95,48 +117,56 @@ func (sm *SummaryMemory) summarize(ctx context.Context) error {
 	return nil
 }
 
-// summarizeAndSnapshot performs the locked summarization and returns the
-// callback + snapshot info so the caller can invoke the callback *after* the
-// lock is released (to avoid deadlock and preserve print ordering).
+// summarizeAndSnapshot performs the summarization, persists the new tail
+// via the underlying store, and returns the callback + snapshot info so the
+// caller can invoke the callback *after* the lock is released.
 func (sm *SummaryMemory) summarizeAndSnapshot(ctx context.Context) (SummaryCallback, int, int, string, error) {
-	sm.mu.Lock()
-	defer sm.mu.Unlock()
-
-	if len(sm.messages) <= sm.threshold {
+	msgs, err := sm.store.List(ctx)
+	if err != nil {
+		return nil, 0, 0, "", err
+	}
+	if len(msgs) <= sm.threshold {
 		return nil, 0, 0, "", nil
 	}
 	keepN := sm.threshold / 2
 	if keepN < 1 {
 		keepN = 1
 	}
-	if len(sm.messages) <= keepN {
+	if len(msgs) <= keepN {
 		return nil, 0, 0, "", nil
 	}
-	before := len(sm.messages)
-	head := sm.messages[:before-keepN]
-	tail := sm.messages[before-keepN:]
-	var b strings.Builder
-	if sm.summary != "" {
-		fmt.Fprintf(&b, "已有摘要:\n%s\n\n", sm.summary)
+
+	before := len(msgs)
+	head := msgs[:before-keepN]
+	tail := msgs[before-keepN:]
+
+	sm.mu.Lock()
+	existing := sm.summary
+	sm.mu.Unlock()
+
+	var body strings.Builder
+	if existing != "" {
+		fmt.Fprintf(&body, "Existing summary:\n%s\n\n", existing)
 	}
 	for _, msg := range head {
-		fmt.Fprintf(&b, "[%s]: %s\n", msg.Role, msg.Content)
+		fmt.Fprintf(&body, "[%s]: %s\n", msg.Role, msg.Content)
 	}
-	prompt := "请将以下对话摘要为简洁的上下文描述:\n\n" + b.String()
+	prompt := fmt.Sprintf(summaryPromptTemplate, body.String())
 	resp, err := sm.model.Generate(ctx, []model.ChatMessage{
 		{Role: model.RoleUser, Content: prompt},
 	})
 	if err != nil {
 		return nil, 0, 0, "", err
 	}
-	sm.summary = resp.Message.Content
-	sm.messages = slicesClone(tail)
-	return sm.onSummary, before, len(sm.messages), sm.summary, nil
-}
 
-func slicesClone(s []model.ChatMessage) []model.ChatMessage {
-	if s == nil {
-		return nil
+	newSummary := resp.Message.Content
+	sm.mu.Lock()
+	sm.summary = newSummary
+	cb := sm.onSummary
+	sm.mu.Unlock()
+
+	if err := sm.store.Replace(ctx, tail); err != nil {
+		return nil, 0, 0, "", err
 	}
-	return append([]model.ChatMessage(nil), s...)
+	return cb, before, len(tail), newSummary, nil
 }

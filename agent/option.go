@@ -16,8 +16,22 @@ import (
 
 type AgentOption func(*Agent)
 
+// MemoryFactory produces the per-session semantic Memory (Buffer / Summary /
+// custom). Concrete Memory implementations internally hold whatever storage
+// engine they need (in-memory slice, Redis list, SQL table, …); the Agent
+// does not know about the underlying MessageStore at all.
+//
+// Typical shape:
+//
+//	func(sid string) memory.Memory {
+//	    store := memory.NewInMemoryMessageStore() // or Redis/SQL/custom
+//	    return memory.NewBuffer(store, 100)
+//	}
 type MemoryFactory func(sessionID string) memory.Memory
 
+// ContentStoreFactory produces the per-session ContentStore used for
+// persisting truncated tool-result content. Follows the same pluggable-engine
+// pattern as MemoryFactory.
 type ContentStoreFactory func(sessionID string) memory.ContentStore
 
 type SessionOption func(*Session)
@@ -53,6 +67,10 @@ func WithMemory(m memory.Memory) AgentOption {
 	}
 }
 
+// WithMemoryFactory injects the per-session semantic Memory factory. The
+// underlying MessageStore data engine (InMemory / Redis / SQL / custom) is
+// chosen inside the factory body — the Agent itself does not expose a
+// separate MessageStore-level option.
 func WithMemoryFactory(f MemoryFactory) AgentOption {
 	return func(a *Agent) {
 		a.memoryFactory = f

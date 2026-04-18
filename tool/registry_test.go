@@ -8,36 +8,36 @@ import (
 )
 
 type WeatherInput struct {
-	Location string `json:"location" description:"城市名称，例如：上海" required:"true"`
-	Unit     string `json:"unit"     description:"温度单位"          enum:"celsius,fahrenheit"`
+	Location string `json:"location" description:"City name, e.g. Shanghai" required:"true"`
+	Unit     string `json:"unit"     description:"Temperature unit"          enum:"celsius,fahrenheit"`
 }
 
 type SearchInput struct {
-	Query   string   `json:"query"   description:"搜索关键词" required:"true"`
-	Limit   int      `json:"limit"   description:"返回结果数量"`
-	Filters []string `json:"filters" description:"过滤条件列表"`
+	Query   string   `json:"query"   description:"Search keywords"   required:"true"`
+	Limit   int      `json:"limit"   description:"Maximum number of results"`
+	Filters []string `json:"filters" description:"List of filter expressions"`
 }
 
 type Address struct {
-	City   string `json:"city"   description:"城市" required:"true"`
-	Street string `json:"street" description:"街道"`
+	City   string `json:"city"   description:"City"   required:"true"`
+	Street string `json:"street" description:"Street"`
 }
 
 type UserInput struct {
-	Name    string  `json:"name"    description:"用户名" required:"true"`
-	Age     int     `json:"age"     description:"年龄"`
-	Active  bool    `json:"active"  description:"是否活跃"`
-	Score   float64 `json:"score"   description:"评分"`
-	Address Address `json:"address" description:"地址"`
+	Name    string  `json:"name"    description:"User name" required:"true"`
+	Age     int     `json:"age"     description:"Age"`
+	Active  bool    `json:"active"  description:"Whether the user is active"`
+	Score   float64 `json:"score"   description:"Score"`
+	Address Address `json:"address" description:"Address"`
 }
 
 type EmbeddedBase struct {
-	Verbose bool `json:"verbose" description:"是否输出详细信息"`
+	Verbose bool `json:"verbose" description:"Whether to emit verbose output"`
 }
 
 type CommandInput struct {
 	EmbeddedBase
-	Command string `json:"command" description:"要执行的命令" required:"true"`
+	Command string `json:"command" description:"Command to execute" required:"true"`
 }
 
 type literalTool struct {
@@ -189,7 +189,7 @@ func TestToolRegistry_AddTool(t *testing.T) {
 
 func TestToolRegistry_Get(t *testing.T) {
 	reg := NewToolRegistry()
-	reg.Register("get_weather", "获取天气", WeatherInput{}, func(input map[string]interface{}) (string, error) {
+	reg.Register("get_weather", "Get the weather", WeatherInput{}, func(input map[string]interface{}) (string, error) {
 		return "sunny", nil
 	})
 
@@ -197,7 +197,7 @@ func TestToolRegistry_Get(t *testing.T) {
 	if !ok {
 		t.Fatal("expected tool to exist")
 	}
-	if got.Name() != "get_weather" || got.Description() != "获取天气" {
+	if got.Name() != "get_weather" || got.Description() != "Get the weather" {
 		t.Errorf("Get: wrong tool: name=%q desc=%q", got.Name(), got.Description())
 	}
 	if got.Schema() == nil || got.Schema().Type != "object" {
@@ -212,7 +212,7 @@ func TestToolRegistry_Get(t *testing.T) {
 
 func TestToolRegistry_RegisterAndExecute(t *testing.T) {
 	reg := NewToolRegistry()
-	reg.Register("get_weather", "获取天气", WeatherInput{}, func(input map[string]interface{}) (string, error) {
+	reg.Register("get_weather", "Get the weather", WeatherInput{}, func(input map[string]interface{}) (string, error) {
 		return "sunny, 25°C", nil
 	})
 
@@ -225,7 +225,7 @@ func TestToolRegistry_RegisterAndExecute(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	result, err := reg.Execute(ctx, "get_weather", map[string]any{"location": "上海"})
+	result, err := reg.Execute(ctx, "get_weather", map[string]any{"location": "Shanghai"})
 	if err != nil {
 		t.Fatalf("execute failed: %v", err)
 	}

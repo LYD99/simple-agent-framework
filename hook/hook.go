@@ -18,9 +18,9 @@ const (
 	EventError
 	EventStreamChunk
 	EventSkillContextLog
-	EventRuleView       // 渐进式披露：模型按需加载 rule 完整内容
-	EventSkillCallStart // 模型调用 skill_call 开始
-	EventSkillCallDone  // skill_call 执行完成
+	EventRuleView       // progressive disclosure: model loaded a rule's full content on demand
+	EventSkillCallStart // model invoked a skill_call
+	EventSkillCallDone  // skill_call execution finished
 )
 
 type Event struct {

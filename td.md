@@ -114,11 +114,17 @@ github.com/LYD99/simple-agent-framework/
 │   └── composite.go           # 组合评估器
 │
 ├── memory/                    # 记忆管理
-│   ├── memory.go              # Memory interface
-│   ├── buffer.go              # BufferMemory (滑动窗口)
-│   ├── summary.go             # SummaryMemory (摘要压缩)
+│   ├── memory.go              # Memory interface (语义层: 滑窗/摘要策略)
+│   ├── buffer.go              # BufferMemory (滑动窗口, 基于 MessageStore)
+│   ├── summary.go             # SummaryMemory (摘要压缩, 基于 MessageStore)
+│   ├── store.go               # MessageStore 接口 (Memory 实现的内部组合参数)
+│   ├── store_inmem.go         # InMemoryMessageStore (零依赖默认引擎)
+│   │                          # Redis/SQL/Custom 引擎由调用方按需实现 MessageStore 接口即可
 │   ├── compressor.go          # 动态上下文压缩 (截断/淘汰/智能摘要)
-│   ├── content_store.go       # ContentStore 接口 + 内置实现 (内存/文件/Redis)
+│   ├── content_store.go       # ContentStore 接口 (同样通过 Store 引擎抽象)
+│   ├── content_store_inmem.go # InMemoryContentStore
+│   ├── content_store_redis.go # RedisContentStore
+│   ├── content_store_file.go  # FileContentStore
 │   └── message.go             # Message 类型定义
 │
 ├── model/                     # LLM 客户端抽象 (支持自定义 Client)
@@ -721,16 +727,106 @@ case StateExecuting:
 | `RuleBasedEvaluator` | 基于规则判断 (如检查输出是否包含关键字、是否符合格式) |
 | `CompositeEvaluator` | 组合多个 Evaluator，全部通过才 Complete |
 
-### 4.6 Memory — 记忆
+### 4.6 Memory — 记忆 (两层架构：语义层 + 数据引擎层)
+
+Memory 内部分为两层，但**对 Agent 只暴露一个概念 `MemoryFactory`**：
+- **语义层 (`Memory`)**: 负责"记住什么、怎么裁剪" (BufferMemory 滑窗 / SummaryMemory 摘要)
+- **数据引擎 (`MessageStore`)**: 负责"消息存在哪" (内存 / Redis / SQL / 自定义)，**仅作为具体 Memory 实现的内部组合**。
+
+所有 Memory 实现都**必须**通过 `MessageStore` 访问底层存储，不得直接持有 `[]ChatMessage`。这样同一套语义策略可以搭配任意存储引擎，也支持跨进程 / 持久化 / 水平扩展。
+
+**Agent 不感知 `MessageStore`**，也不需要任何 `MessageStoreFactory` 类型。用户在自己的 `MemoryFactory` 闭包里直接 `new` 一个 `MessageStore` 传给 `memory.NewBuffer` / `memory.NewSummary`——引擎切换是工厂函数体内的一次替换，Agent 层零改动。
 
 ```go
-// memory/memory.go
+// memory/memory.go — 语义层接口
 type Memory interface {
     Messages(ctx context.Context) ([]model.ChatMessage, error)
     Add(ctx context.Context, msgs ...model.ChatMessage) error
     Clear(ctx context.Context) error
 }
 ```
+
+```go
+// memory/store.go — 底层数据引擎接口 (per-session)
+//
+// 每个 MessageStore 实例对应一个 sessionID 的消息序列，
+// Memory 语义层只调用这些原子操作，不关心底层是内存/Redis/DB。
+type MessageStore interface {
+    // Append 追加一条或多条消息，保持插入顺序
+    Append(ctx context.Context, msgs ...model.ChatMessage) error
+    // List 返回全部消息 (按插入顺序)
+    List(ctx context.Context) ([]model.ChatMessage, error)
+    // Replace 原子替换全部消息 (压缩/摘要场景用)
+    Replace(ctx context.Context, msgs []model.ChatMessage) error
+    // Len 当前消息条数 (用于滑窗判断, 避免拉全量)
+    Len(ctx context.Context) (int, error)
+    // TrimHead 从头部裁剪 n 条 (滑窗场景用, 引擎可优化为 O(1))
+    TrimHead(ctx context.Context, n int) error
+    // Clear 清空当前 session 的消息
+    Clear(ctx context.Context) error
+    // Close 释放资源 (如 redis/db 连接可选择 no-op)
+    Close() error
+}
+```
+
+> **注意**: `MessageStore` 没有对应的 `MessageStoreFactory` 类型——它纯粹是 `memory.NewBuffer(store, ...)` / `memory.NewSummary(store, ...)` 等构造器的参数，由用户在 `MemoryFactory` 闭包内即时构造即可。
+
+#### 4.6.1 内置 MessageStore 实现
+
+```
+            MessageStore (interface)
+                  │
+       ┌──────────┼──────────┬───────────┐
+       ▼          ▼          ▼           ▼
+   InMemory    Redis        SQL       Custom     ← 实现接口即可接入任意引擎
+  (sync.Mutex) (LPUSH/LRANGE) (messages 表)
+```
+
+| 实现 | 底层 | 适用场景 | 特点 |
+|------|------|---------|------|
+| `InMemoryMessageStore` | `sync.Mutex + []ChatMessage` | 单机、单进程、测试 | 零依赖 (默认) |
+| `RedisMessageStore` | Redis List (`LPUSH`/`LRANGE`/`LTRIM`) | 分布式、会话跨实例恢复 | TTL 自动过期 |
+| `SQLMessageStore` | `messages(session_id, seq, role, content, ...)` | 强持久化、审计、分析 | 支持事务与查询 |
+| `CustomMessageStore` | 用户自定义 (Mongo/DynamoDB/…) | 已有存储基建 | 实现 7 个方法即可 |
+
+#### 4.6.2 BufferMemory / SummaryMemory 的重构
+
+```go
+// memory/buffer.go
+type BufferMemory struct {
+    store       MessageStore // 底层引擎，不直接持有 slice
+    maxMessages int
+}
+
+func NewBuffer(store MessageStore, maxMessages int) *BufferMemory {
+    return &BufferMemory{store: store, maxMessages: maxMessages}
+}
+
+func (m *BufferMemory) Add(ctx context.Context, msgs ...model.ChatMessage) error {
+    if err := m.store.Append(ctx, msgs...); err != nil {
+        return err
+    }
+    n, _ := m.store.Len(ctx)
+    if m.maxMessages > 0 && n > m.maxMessages {
+        return m.store.TrimHead(ctx, n-m.maxMessages)
+    }
+    return nil
+}
+
+func (m *BufferMemory) Messages(ctx context.Context) ([]model.ChatMessage, error) {
+    return m.store.List(ctx)
+}
+
+func (m *BufferMemory) Clear(ctx context.Context) error {
+    return m.store.Clear(ctx)
+}
+```
+
+`SummaryMemory` 同理 — 所有读写都经由 `store`，摘要压缩后通过 `Replace` 原子重建。
+
+#### 4.6.3 ContentStore 同样遵循"引擎可插拔"
+
+原 ContentStore 已经设计了 `InMemory/File/Redis` 多实现 (见 10.9.2)，语义和 `MessageStore` 一致：截断的完整内容通过独立的数据引擎持久化，调用方可自由替换。Agent 对外只暴露 `WithMemoryFactory` / `WithContentStoreFactory` 两个入口；未配置时框架以 `InMemory*` 作为零依赖回退并在日志中提示，便于生产环境发现。
 
 ### 4.7 Tool — 工具
 
@@ -945,9 +1041,11 @@ type Agent struct {
     maxContextRatio        float64
     compressConfig         *CompressAgentConfig
 
-    // --- 会话级资源工厂 ---
-    memoryFactory       MemoryFactory       // 为每个 Session 创建独立 Memory
-    contentStoreFactory ContentStoreFactory // 为每个 Session 创建独立 ContentStore
+    // --- 会话级资源工厂 (只暴露语义层 / ContentStore 两个入口) ---
+    // memoryFactory 内部自由组合 MessageStore 引擎 (InMemory/Redis/SQL/Custom)
+    // Agent 不感知 MessageStoreFactory — 完全由 MemoryFactory 闭包管理。
+    memoryFactory       MemoryFactory       // 会话级语义层 Memory
+    contentStoreFactory ContentStoreFactory // 截断内容存储引擎
 
     // --- 会话管理 ---
     sessions sync.Map // map[string]*Session
@@ -971,20 +1069,30 @@ type MemoryFactory func(sessionID string) memory.Memory
 type ContentStoreFactory func(sessionID string) memory.ContentStore
 ```
 
-默认工厂为每个 Session 创建 `BufferMemory(100)` 和 `InMemoryContentStore`。调用方可自定义工厂实现持久化 (如 Redis-backed Memory):
+默认情况下每个 Session 使用 `BufferMemory(InMemoryMessageStore, 100)` + `InMemoryContentStore` 作为**零依赖回退**，并在 Agent 初始化时打印一条告警日志。生产环境只需要覆写 `WithMemoryFactory` / `WithContentStoreFactory`，在闭包里自由选择持久化引擎：
 
 ```go
-// 默认: 每个会话一个内存 BufferMemory
+// 默认 (测试/脚本场景): 内存引擎, 进程退出即丢失
 a := agent.New(agent.WithModel(m))
 
-// 自定义: Redis-backed Memory 支持会话恢复
+// 推荐: Redis 引擎 — MemoryFactory 闭包内部组合 MessageStore, Agent 不感知引擎细节
 a := agent.New(
     agent.WithModel(m),
-    agent.WithMemoryFactory(func(sessionID string) memory.Memory {
-        return redismem.New(redisClient, "agent:session:"+sessionID, 100)
+    agent.WithMemoryFactory(func(sid string) memory.Memory {
+        store := memory.NewRedisMessageStore(redisClient, "agent:msgs:"+sid, 24*time.Hour)
+        return memory.NewBuffer(store, 100) // 滑窗策略 + Redis 引擎
     }),
-    agent.WithContentStoreFactory(func(sessionID string) memory.ContentStore {
-        return memory.NewRedisContentStore(redisClient, "agent:content:"+sessionID)
+    agent.WithContentStoreFactory(func(sid string) memory.ContentStore {
+        return memory.NewRedisContentStore(redisClient, "agent:content:"+sid, 24*time.Hour)
+    }),
+)
+
+// 进阶: 语义层 + 引擎层在同一个工厂中组合 (SQL 持久化 + 摘要策略)
+a := agent.New(
+    agent.WithModel(m),
+    agent.WithMemoryFactory(func(sid string) memory.Memory {
+        store := memory.NewSQLMessageStore(sqldb, sid)    // 底层 SQL 引擎
+        return memory.NewSummary(store, summarizer, 50)   // 语义层摘要策略
     }),
 )
 ```
@@ -1020,7 +1128,9 @@ a := agent.New(
     agent.WithModel(openai.New("gpt-4o", apiKey)),
     agent.WithTools(readTool, writeTool, shellTool),
     agent.WithMemoryFactory(func(sid string) memory.Memory {
-        return memory.NewBuffer(100)
+        // 在工厂闭包内部自由选择引擎 — Agent 对此无感知
+        store := memory.NewRedisMessageStore(rdb, "agent:msgs:"+sid, time.Hour)
+        return memory.NewBuffer(store, 100)
     }),
 )
 
@@ -1571,9 +1681,10 @@ type AgentConfig struct {
     // 流式
     StreamEnabled  bool          // 是否启用流式输出
     
-    // 会话级资源工厂
-    MemoryFactory       MemoryFactory       // 创建会话级 Memory (默认: BufferMemory(100))
-    ContentStoreFactory ContentStoreFactory // 创建会话级 ContentStore (默认: InMemoryContentStore)
+    // 会话级资源工厂 (Agent 只感知语义层 / ContentStore 两个入口)
+    // MessageStore 引擎在 MemoryFactory 闭包内部自由组合, 不出现在 Agent 配置上。
+    MemoryFactory       MemoryFactory       // 语义层 Memory 工厂 (默认: BufferMemory(InMemoryMessageStore, 100) + 告警日志)
+    ContentStoreFactory ContentStoreFactory // 截断内容存储工厂 (默认: InMemoryContentStore + 告警日志)
     
     // 死循环检测
     LoopDetectionThreshold int   // 连续相同工具调用阈值 (默认 3)
@@ -1634,26 +1745,30 @@ type HITLConfig struct {
 
 ### 8.5 Memory 配置 (会话级)
 
-Memory 不再是 Agent 级单例，而是通过工厂为每个 Session 创建独立实例。
+Agent 对外只暴露**一个** Memory 相关工厂：`MemoryFactory`。用户在它的闭包内部自由组合 `MessageStore` 引擎（InMemory / Redis / SQL / Custom）与语义层策略（Buffer / Summary），框架层对具体引擎完全无感知。
 
 ```go
-// 工厂类型
-type MemoryFactory       func(sessionID string) memory.Memory
-type ContentStoreFactory func(sessionID string) memory.ContentStore
-
-// 默认工厂实现
-func defaultMemoryFactory(sessionID string) memory.Memory {
-    return memory.NewBuffer(100)
-}
-func defaultContentStoreFactory(sessionID string) memory.ContentStore {
-    return memory.NewInMemoryContentStore()
-}
-
-// Memory 接口不变
+// memory/memory.go — 语义层接口 (见 4.6)
 type Memory interface {
     Messages(ctx context.Context) ([]model.ChatMessage, error)
     Add(ctx context.Context, msgs ...model.ChatMessage) error
     Clear(ctx context.Context) error
+}
+
+// memory/store.go — 底层数据引擎接口 (仅作为 Memory 实现的内部组合参数, 见 4.6.1)
+type MessageStore interface { /* Append/List/Replace/Len/TrimHead/Clear/Close */ }
+
+// 工厂类型 — Agent 只认识这两个
+type MemoryFactory       func(sessionID string) memory.Memory
+type ContentStoreFactory func(sessionID string) memory.ContentStore
+
+// 零依赖回退 (未显式配置时使用, 并在日志警告)
+func defaultMemoryFactory(sessionID string) memory.Memory {
+    // 组合: 内置 InMemory 引擎 + BufferMemory 滑窗策略
+    return memory.NewBuffer(memory.NewInMemoryMessageStore(), 100)
+}
+func defaultContentStoreFactory(sessionID string) memory.ContentStore {
+    return memory.NewInMemoryContentStore()
 }
 
 // 配置选项
@@ -1667,10 +1782,11 @@ type MemoryConfig struct {
 **Functional Options**
 
 ```go
-// 自定义会话级 Memory 工厂 (替代旧的 WithMemory)
+// 【推荐】自定义语义层 Memory 工厂 — 引擎在闭包内部自由组合
+// (不存在 WithMessageStoreFactory: MessageStore 只是 Memory 实现的内部组件)
 func WithMemoryFactory(f MemoryFactory) AgentOption
 
-// 自定义会话级 ContentStore 工厂
+// 自定义 ContentStore 工厂 (截断内容存储引擎)
 func WithContentStoreFactory(f ContentStoreFactory) AgentOption
 
 // 向后兼容: WithMemory 仍然可用, 但等价于固定工厂
@@ -1678,6 +1794,48 @@ func WithContentStoreFactory(f ContentStoreFactory) AgentOption
 // ⚠️ 使用 WithMemory 时所有 Session 共享同一 Memory, 仅适用于单 Session 场景
 func WithMemory(m memory.Memory) AgentOption
 ```
+
+**典型配置场景**
+
+```go
+// 场景 1: 单机测试 — 零依赖, 默认 InMemory 引擎 (日志会提示 "using in-memory fallback")
+a := agent.New(agent.WithModel(m))
+
+// 场景 2: Redis 引擎 + 滑窗策略 (推荐生产基础配置)
+rdb := redis.NewClient(&redis.Options{Addr: "redis:6379"})
+a := agent.New(
+    agent.WithModel(m),
+    agent.WithMemoryFactory(func(sid string) memory.Memory {
+        store := memory.NewRedisMessageStore(rdb, "agent:msgs:"+sid, 24*time.Hour)
+        return memory.NewBuffer(store, 100)
+    }),
+    agent.WithContentStoreFactory(func(sid string) memory.ContentStore {
+        return memory.NewRedisContentStore(rdb, "agent:content:"+sid, 24*time.Hour)
+    }),
+)
+
+// 场景 3: SQL 持久化 + 摘要策略
+sqldb, _ := sql.Open("postgres", dsn)
+a := agent.New(
+    agent.WithModel(m),
+    agent.WithMemoryFactory(func(sid string) memory.Memory {
+        store := memory.NewSQLMessageStore(sqldb, sid)   // SQL 引擎
+        return memory.NewSummary(store, summarizer, 50)  // 摘要策略
+    }),
+)
+
+// 场景 4: 自定义引擎 (实现 MessageStore 7 个方法即可)
+type MongoMessageStore struct { /* ... */ }
+a := agent.New(
+    agent.WithModel(m),
+    agent.WithMemoryFactory(func(sid string) memory.Memory {
+        store := &MongoMessageStore{coll: mongoColl, sessionID: sid}
+        return memory.NewBuffer(store, 200)
+    }),
+)
+```
+
+> **默认行为**: 未显式配置 `WithMemoryFactory` 时，框架使用 `BufferMemory(InMemoryMessageStore, 100)` 作为零依赖回退，并在 Agent 初始化日志中打印一条 `[WARN] memory: no MemoryFactory configured; falling back to BufferMemory backed by InMemoryMessageStore...` 以提醒生产环境切换到持久化引擎。
 
 ### 8.7 Runtime / 沙箱配置
 
@@ -1733,11 +1891,20 @@ type E2BConfig struct {
            ▼      ▼      ▼
         ReAct  PlanExec  Custom    ← 新增规划策略只需实现接口
 
-             Memory (interface)             会话级 (通过 MemoryFactory 创建)
+             Memory (interface, 语义层)        Agent 唯一感知层 (通过 MemoryFactory 创建)
                   │
-           ┌──────┼──────┐
-           ▼      ▼      ▼
-       Buffer  Summary  Redis     ← MemoryFactory 控制每个 Session 使用哪种实现
+           ┌──────┴──────┐
+           ▼             ▼
+        Buffer        Summary            ← 滑窗 / 摘要策略
+           │             │
+           └──────┬──────┘
+                  ▼
+          MessageStore (仅 Memory 实现的内部组合参数, Agent 不感知)
+                  │
+       ┌──────────┼──────────┬──────────┐
+       ▼          ▼          ▼          ▼
+   InMemory    Redis        SQL       Custom       ← 用户在 MemoryFactory 闭包里
+                                                      直接 new 并传给 Memory 构造器
 
              Runtime (interface)
                   │
@@ -1796,8 +1963,10 @@ a2 := agent.New(
     agent.WithModel(openai.New("gpt-4o", apiKey)),
     agent.WithExecutionMode(planner.ModePlanAndSolve),
     agent.WithEvaluator(llmjudge.New(openai.New("gpt-4o", apiKey))),
-    agent.WithMemoryFactory(func(sid string) memory.Memory {    // 会话级 Memory 工厂
-        return memory.NewBuffer(20)
+    // MemoryFactory 内部一次性组合数据引擎 + 语义层; Agent 无需感知 MessageStore
+    agent.WithMemoryFactory(func(sid string) memory.Memory {
+        store := memory.NewRedisMessageStore(rdb, "agent:msgs:"+sid, time.Hour)
+        return memory.NewBuffer(store, 20)
     }),
     agent.WithTools(readTool, writeTool, shellTool, hybridRAG),
     agent.WithRules(safetyRule, codeStyleRule),
@@ -3646,7 +3815,7 @@ a := agent.New(
 | `core/hook/outputhook/` | `hook/outputhook/` | 保留，增加与 Agent 的集成 |
 | `core/agent/agent.go` | `agent/agent.go` + `agent/session.go` | 重构: Agent 共享单例 + Session 会话级隔离 |
 | `core/agent/planner.go` | `planner/react.go` | 修正 package，实现 ReAct |
-| `core/memory/memory.go` | `memory/memory.go` + `buffer.go` | 实现 BufferMemory |
+| `core/memory/memory.go` | `memory/memory.go` + `buffer.go` + `store.go` | 两层架构: 语义层 Memory + 数据引擎层 MessageStore (InMemory/Redis/SQL) |
 | `core/runtime/runtime.go` | `runtime/runtime.go` + `local.go` + `e2b.go` | 实现 Runtime interface + E2B 云沙箱 |
 | `core/interrupter/hitl.go` | `interrupter/hitl.go` | 实现 HITL 完整逻辑 |
 | _(新增)_ | `agent/session.go` | Session 会话级状态 (Memory/LoopDetector/ContentStore) |
@@ -3684,8 +3853,10 @@ a := agent.New(
 | _(新增)_ | `skill/view_tool.go` | skill_view (读取 Skill 目录文件) |
 | _(新增)_ | `runtime/e2b.go` | E2B 云沙箱 (REST API 控制面 + envd 数据面) |
 | _(新增)_ | `agent/loop_detector.go` | 死循环检测器 (LoopDetector, 两阶段策略) |
+| _(新增)_ | `memory/store.go` | MessageStore 接口 (Memory 实现的内部组合参数, Agent 不感知) |
+| _(新增)_ | `memory/store_inmem.go` | 默认 InMemoryMessageStore (Redis/SQL/Custom 由调用方按需实现接口) |
 | _(新增)_ | `memory/compressor.go` | 动态上下文压缩 (L1~L4 四层策略 + ContextCompressor) |
-| _(新增)_ | `memory/content_store.go` | ContentStore 接口 + 内置实现 (InMemory/File/Redis) |
+| _(新增)_ | `memory/content_store.go` + `content_store_{inmem,redis,file}.go` | ContentStore 接口 + 多引擎实现 |
 | _(新增)_ | `tool/builtin/fetch_full_result.go` | fetch_full_result 内置工具 (查询截断内容完整结果) |
 | _(新增)_ | `errors/errors.go` | 统一错误 + StructuredValidationError |
 | _(新增)_ | `examples/` | 使用示例 |

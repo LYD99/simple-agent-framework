@@ -17,14 +17,14 @@ func (t *ReadTool) Name() string {
 }
 
 func (t *ReadTool) Description() string {
-	return "读取指定路径的文件内容"
+	return "Read the content of a file at the given path."
 }
 
 func (t *ReadTool) Schema() *tool.SchemaProperty {
 	return &tool.SchemaProperty{
 		Type: "object",
 		Properties: map[string]*tool.SchemaProperty{
-			"path": {Type: "string", Description: "文件路径"},
+			"path": {Type: "string", Description: "File path to read."},
 		},
 		Required: []string{"path"},
 	}
