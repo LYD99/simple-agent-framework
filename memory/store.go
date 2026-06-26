@@ -3,7 +3,7 @@ package memory
 import (
 	"context"
 
-	"simple-agent-framework/model"
+	"github.com/LYD99/simple-agent-framework/model"
 )
 
 // MessageStore is the low-level data-engine abstraction for a session's
