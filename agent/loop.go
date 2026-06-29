@@ -32,6 +32,25 @@ const (
 	StateError
 )
 
+// maybeSaveCheckpoint 尝试保存 checkpoint（如果启用则异步保存）
+func (s *Session) maybeSaveCheckpoint(ctx context.Context, state LoopState, iteration int, plan *planner.PlanResult, stepResults []planner.StepResult) {
+	if !s.isCheckpointEnabled() {
+		return
+	}
+	go func() {
+		saveCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		snapshot := &interrupter.AgentSnapshot{
+			RunID:       s.getRunID(),
+			Plan:        plan,
+			StepResults: stepResults,
+			Iteration:   iteration,
+			State:       interrupter.LoopState(state),
+		}
+		_ = s.SaveCheckpoint(saveCtx, snapshot)
+	}()
+}
+
 // runLoop drives the agent state machine within this session's isolated context.
 func (s *Session) runLoop(ctx context.Context) (*AgentResult, error) {
 	start := time.Now()
@@ -71,6 +90,11 @@ func (s *Session) runLoop(ctx context.Context) (*AgentResult, error) {
 	for {
 		select {
 		case <-ctx.Done():
+			var plan *planner.PlanResult
+			if pendingAction != nil {
+				plan = &planner.PlanResult{Action: *pendingAction, Reasoning: pendingReasoning}
+			}
+			s.maybeSaveCheckpoint(ctx, state, iteration, plan, history)
 			return nil, ctx.Err()
 		default:
 		}
@@ -222,6 +246,7 @@ func (s *Session) runLoop(ctx context.Context) (*AgentResult, error) {
 			}
 
 		case StateInterrupt:
+			s.maybeSaveCheckpoint(ctx, state, iteration, &planner.PlanResult{Action: *pendingAction, Reasoning: pendingReasoning}, history)
 			if pendingAction == nil {
 				err := fmt.Errorf("agent: no pending action")
 				_ = a.emit(ctx, hook.EventError, ErrorPayload{Error: err, State: "interrupt"})
@@ -341,6 +366,7 @@ func (s *Session) runLoop(ctx context.Context) (*AgentResult, error) {
 			state = StateExecuting
 
 		case StateExecuting:
+			s.maybeSaveCheckpoint(ctx, state, iteration, &planner.PlanResult{Action: *pendingAction, Reasoning: pendingReasoning}, history)
 			if pendingAction == nil {
 				err := fmt.Errorf("agent: no pending action for execute")
 				return &AgentResult{Error: err, Duration: time.Since(start)}, nil

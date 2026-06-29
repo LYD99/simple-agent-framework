@@ -272,3 +272,9 @@ func WithCompressAgent(config CompressAgentConfig) AgentOption {
 		a.compressConfig = &c
 	}
 }
+
+func WithCheckpointStore(store interrupter.CheckpointStore) AgentOption {
+	return func(a *Agent) {
+		a.checkpointStore = store
+	}
+}

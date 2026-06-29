@@ -52,6 +52,8 @@ import (
 	"github.com/LYD99/simple-agent-framework/tool"
 	"github.com/LYD99/simple-agent-framework/tool/builtin"
 	"github.com/LYD99/simple-agent-framework/tool/mcp"
+
+	_ "net/http/pprof"
 )
 
 // ── Output schema for Demo 7 ─────────────────────────────────────────────────
@@ -69,6 +71,16 @@ func main() {
 		fmt.Fprintln(os.Stderr, "Set DEEPSEEK_API_KEY to run this demo")
 		os.Exit(1)
 	}
+
+	go func() {
+		adminAddr := ":6060"
+		fmt.Printf("Admin server starting on http://localhost%s\n", adminAddr)
+		fmt.Printf("  pprof endpoints: /debug/pprof/profile, /debug/pprof/heap, /debug/pprof/goroutine\n")
+		if err := http.ListenAndServe(adminAddr, nil); err != nil && err != http.ErrServerClosed {
+			fmt.Printf("Admin server error: %v\n", err)
+		}
+	}()
+
 	demoDir := mustDemoDir()
 	rulesDir := filepath.Join(demoDir, "rules")
 	skillsDir := filepath.Join(demoDir, "skills")
@@ -619,27 +631,25 @@ func main() {
 
 	store := interrupter.NewMemoryStore()
 	snapshot := &interrupter.AgentSnapshot{
-		RunID:     "run-demo-001",
-		Iteration: 3,
-		Messages: []model.ChatMessage{
-			{Role: model.RoleUser, Content: "Deploy v2.1.0 to production"},
-			{Role: model.RoleAssistant, Content: "Checking current version first..."},
-		},
+		RunID:       "run-demo-001",
+		Iteration:   3,
+		State:       interrupter.LoopState(0),
+		StepResults: []planner.StepResult{},
 	}
 
 	if err := store.Save(ctx, snapshot.RunID, snapshot); err != nil {
 		fmt.Printf("Save error: %v\n", err)
 	} else {
-		fmt.Printf("Snapshot saved: run_id=%s iteration=%d messages=%d\n",
-			snapshot.RunID, snapshot.Iteration, len(snapshot.Messages))
+		fmt.Printf("Snapshot saved: run_id=%s iteration=%d steps=%d\n",
+			snapshot.RunID, snapshot.Iteration, len(snapshot.StepResults))
 	}
 
 	loaded, err := store.Load(ctx, snapshot.RunID)
 	if err != nil {
 		fmt.Printf("Load error: %v\n", err)
 	} else {
-		fmt.Printf("Snapshot loaded: run_id=%s iteration=%d messages=%d\n",
-			loaded.RunID, loaded.Iteration, len(loaded.Messages))
+		fmt.Printf("Snapshot loaded: run_id=%s iteration=%d steps=%d\n",
+			loaded.RunID, loaded.Iteration, len(loaded.StepResults))
 		fmt.Printf("Serialize → JSON: %d bytes\n", func() int {
 			b, _ := loaded.Serialize()
 			return len(b)
@@ -1079,16 +1089,14 @@ func main() {
 	fullSnap := &interrupter.AgentSnapshot{
 		RunID:     "run-full-demo",
 		Iteration: 2,
-		Messages: []model.ChatMessage{
-			{Role: model.RoleUser, Content: "Deploy v3.0.0"},
-			{Role: model.RoleAssistant, Content: "Checking version first..."},
+		State:     interrupter.LoopState(0),
+		Plan: &planner.PlanResult{
+			Action: planner.Action{
+				Type:      planner.ActionToolCall,
+				ToolName:  "check_version",
+				ToolInput: map[string]any{},
+			},
 		},
-		PendingAction: &planner.Action{
-			Type:      planner.ActionToolCall,
-			ToolName:  "check_version",
-			ToolInput: map[string]any{},
-		},
-		TokensUsed: 420,
 		StepResults: []planner.StepResult{
 			{
 				Action: planner.Action{
@@ -1105,10 +1113,9 @@ func main() {
 	_ = store20.Save(ctx, fullSnap.RunID, fullSnap)
 	loaded20, _ := store20.Load(ctx, fullSnap.RunID)
 	b20, _ := loaded20.Serialize()
-	fmt.Printf("AgentSnapshot full fields: run_id=%s iter=%d pending_action=%s tokens=%d steps=%d json=%d bytes\n",
+	fmt.Printf("AgentSnapshot full fields: run_id=%s iter=%d plan_action=%s steps=%d json=%d bytes\n",
 		loaded20.RunID, loaded20.Iteration,
-		loaded20.PendingAction.ToolName,
-		loaded20.TokensUsed,
+		loaded20.Plan.Action.ToolName,
 		len(loaded20.StepResults),
 		len(b20))
 

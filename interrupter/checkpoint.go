@@ -6,27 +6,23 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/LYD99/simple-agent-framework/model"
 	"github.com/LYD99/simple-agent-framework/planner"
 )
 
-// AgentSnapshot captures the runtime state of a single Agent run, suitable
-// for checkpoint/resume scenarios.
+type LoopState int
+
 type AgentSnapshot struct {
-	RunID         string               `json:"run_id"`
-	Iteration     int                  `json:"iteration"`
-	Messages      []model.ChatMessage  `json:"messages"`
-	PendingAction *planner.Action      `json:"pending_action,omitempty"`
-	TokensUsed    int                  `json:"tokens_used"`
-	StepResults   []planner.StepResult `json:"step_results"`
+	RunID       string               `json:"run_id"`
+	Plan        *planner.PlanResult  `json:"plan,omitempty"`
+	StepResults []planner.StepResult `json:"step_results"`
+	Iteration   int                  `json:"iteration"`
+	State       LoopState            `json:"state"`
 }
 
-// Serialize marshals the snapshot to JSON.
 func (s *AgentSnapshot) Serialize() ([]byte, error) {
 	return json.Marshal(s)
 }
 
-// Deserialize restores an AgentSnapshot from JSON.
 func Deserialize(data []byte) (*AgentSnapshot, error) {
 	var s AgentSnapshot
 	if err := json.Unmarshal(data, &s); err != nil {
@@ -35,14 +31,12 @@ func Deserialize(data []byte) (*AgentSnapshot, error) {
 	return &s, nil
 }
 
-// CheckpointStore persists and restores AgentSnapshots.
 type CheckpointStore interface {
 	Save(ctx context.Context, runID string, snapshot *AgentSnapshot) error
 	Load(ctx context.Context, runID string) (*AgentSnapshot, error)
 	Delete(ctx context.Context, runID string) error
 }
 
-// MemoryStore is an in-process CheckpointStore intended for dev/test only.
 type MemoryStore struct {
 	data map[string][]byte
 	mu   sync.RWMutex

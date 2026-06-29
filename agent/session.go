@@ -4,16 +4,15 @@ import (
 	"context"
 	"crypto/rand"
 	"fmt"
+	"time"
 
+	"github.com/LYD99/simple-agent-framework/interrupter"
 	"github.com/LYD99/simple-agent-framework/memory"
 	"github.com/LYD99/simple-agent-framework/model"
 	"github.com/LYD99/simple-agent-framework/planner"
 	"github.com/LYD99/simple-agent-framework/prompt"
 )
 
-// Session holds per-request/conversation state, isolated from other sessions.
-// The shared Agent components (model, planner, executor, toolRegistry, etc.) are
-// accessed via s.agent (read-only).
 type Session struct {
 	id           string
 	agent        *Agent
@@ -21,6 +20,7 @@ type Session struct {
 	loopDetector *LoopDetector
 	contentStore memory.ContentStore
 	compressor   *memory.ContextCompressor
+	checkpoint   *sessionCheckpointConfig
 }
 
 func (s *Session) ID() string { return s.id }
@@ -29,8 +29,6 @@ func (s *Session) Messages(ctx context.Context) ([]model.ChatMessage, error) {
 	return s.memory.Messages(ctx)
 }
 
-// Run executes the agent loop within this session's isolated context.
-// The returned AgentResult.SessionID is always set to s.ID().
 func (s *Session) Run(ctx context.Context, input string) (*AgentResult, error) {
 	a := s.agent
 	a.mu.RLock()
@@ -52,14 +50,11 @@ func (s *Session) Run(ctx context.Context, input string) (*AgentResult, error) {
 	return result, err
 }
 
-// RunStream is the streaming variant (currently delegates to Run).
 func (s *Session) RunStream(ctx context.Context, input string) (*AgentResult, error) {
 	ctx = context.WithValue(ctx, runStreamCtxKey{}, true)
 	return s.Run(ctx, input)
 }
 
-// Session returns an existing session for the given ID, or creates a new one.
-// The same sessionID always yields the same Session (preserving conversation context).
 func (a *Agent) Session(sessionID string, opts ...SessionOption) *Session {
 	if v, ok := a.sessions.Load(sessionID); ok {
 		return v.(*Session)
@@ -72,7 +67,6 @@ func (a *Agent) Session(sessionID string, opts ...SessionOption) *Session {
 	return s
 }
 
-// NewSession creates an anonymous session with a generated ID.
 func (a *Agent) NewSession(opts ...SessionOption) *Session {
 	return a.Session(generateSessionID(), opts...)
 }
@@ -109,8 +103,6 @@ func (a *Agent) newSessionInternal(id string, opts ...SessionOption) *Session {
 	return s
 }
 
-// buildPlanState assembles the PlanState using the session's memory and agent's
-// shared prompt builder / tool registry.
 func (s *Session) buildPlanState(ctx context.Context, history []planner.StepResult) (*planner.PlanState, error) {
 	a := s.agent
 	a.mu.RLock()
@@ -144,8 +136,6 @@ func (s *Session) buildPlanState(ctx context.Context, history []planner.StepResu
 	}, nil
 }
 
-// rebuildPromptBuilder recreates the builder from current rule/skill registries.
-// Extracted as a package-level helper to keep it usable from both Agent and Session.
 func buildPromptSummaries(a *Agent) ([]prompt.RuleSummary, []prompt.SkillSummary) {
 	rules := a.ruleRegistry.List()
 	ruleSums := make([]prompt.RuleSummary, 0, len(rules))
@@ -176,8 +166,6 @@ func generateSessionID() string {
 	return fmt.Sprintf("%x-%x-%x-%x-%x", b[0:4], b[4:6], b[6:8], b[8:10], b[10:])
 }
 
-// contentStoreCtxKey is used to inject the session's ContentStore into context,
-// so that the fetch_full_result builtin tool can access it.
 type contentStoreCtxKey struct{}
 type runStreamCtxKey struct{}
 
@@ -193,7 +181,91 @@ func runStreamFromContext(ctx context.Context) bool {
 	return v
 }
 
-// injectSessionContext puts session-scoped resources into the context.
 func (s *Session) injectSessionContext(ctx context.Context) context.Context {
 	return context.WithValue(ctx, contentStoreCtxKey{}, s.contentStore)
+}
+
+// --- Checkpoint support ---
+
+type sessionCheckpointConfig struct {
+	store            interrupter.CheckpointStore
+	autoSaveInterval time.Duration
+	runID            string
+	lastSaveTime     time.Time
+}
+
+func (s *Session) isCheckpointEnabled() bool {
+	return s.checkpoint != nil && s.checkpoint.store != nil
+}
+
+func (s *Session) getCheckpointStore() interrupter.CheckpointStore {
+	if s.checkpoint == nil {
+		return nil
+	}
+	return s.checkpoint.store
+}
+
+func (s *Session) getRunID() string {
+	if s.checkpoint == nil {
+		return ""
+	}
+	return s.checkpoint.runID
+}
+
+func (s *Session) SaveCheckpoint(ctx context.Context, snapshot *interrupter.AgentSnapshot) error {
+	if !s.isCheckpointEnabled() {
+		return nil
+	}
+
+	store := s.getCheckpointStore()
+	if store == nil {
+		return nil
+	}
+
+	if snapshot == nil {
+		return nil
+	}
+
+	if snapshot.RunID == "" {
+		snapshot.RunID = s.getRunID()
+	}
+
+	return store.Save(ctx, snapshot.RunID, snapshot)
+}
+
+func (s *Session) LoadCheckpoint(ctx context.Context, runID string) (*interrupter.AgentSnapshot, error) {
+	if !s.isCheckpointEnabled() {
+		return nil, nil
+	}
+
+	store := s.getCheckpointStore()
+	if store == nil {
+		return nil, nil
+	}
+
+	return store.Load(ctx, runID)
+}
+
+func (s *Session) Suspend(ctx context.Context, snapshot *interrupter.AgentSnapshot) error {
+	return s.SaveCheckpoint(ctx, snapshot)
+}
+
+func (s *Session) Resume(ctx context.Context, runID string) (*interrupter.AgentSnapshot, error) {
+	return s.LoadCheckpoint(ctx, runID)
+}
+
+func WithCheckpoint(store interrupter.CheckpointStore, autoSaveInterval time.Duration) SessionOption {
+	return func(s *Session) {
+		s.checkpoint = &sessionCheckpointConfig{
+			store:            store,
+			autoSaveInterval: autoSaveInterval,
+			runID:            generateRunID(),
+		}
+	}
+}
+
+func generateRunID() string {
+	b := make([]byte, 16)
+	_, _ = rand.Read(b)
+	return fmt.Sprintf("run-%x-%x-%x-%x-%x", b[0:4], b[4:6], b[6:8], b[8:10], b[10:])
 }

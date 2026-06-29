@@ -84,6 +84,9 @@ type Agent struct {
 
 	// --- session management ---
 	sessions sync.Map // map[string]*Session
+
+	// --- checkpoint support ---
+	checkpointStore interrupter.CheckpointStore
 }
 
 type AgentResult struct {
@@ -402,4 +405,42 @@ func (a *Agent) validateFinalOutput(answer string) (string, error) {
 		return err.Error(), err
 	}
 	return "", nil
+}
+
+// --- Checkpoint support (Agent level) ---
+
+// Suspend 挂起指定 session，保存检查点
+func (a *Agent) Suspend(ctx context.Context, sessionID string, snapshot *interrupter.AgentSnapshot) error {
+	s, ok := a.sessions.Load(sessionID)
+	if !ok {
+		return fmt.Errorf("session not found: %s", sessionID)
+	}
+	session := s.(*Session)
+	return session.Suspend(ctx, snapshot)
+}
+
+// Resume 从检查点恢复指定 session
+func (a *Agent) Resume(ctx context.Context, sessionID string, runID string) (*interrupter.AgentSnapshot, error) {
+	s, ok := a.sessions.Load(sessionID)
+	if !ok {
+		return nil, fmt.Errorf("session not found: %s", sessionID)
+	}
+	session := s.(*Session)
+	return session.Resume(ctx, runID)
+}
+
+// GetState 获取指定 session 的当前状态
+func (a *Agent) GetState(ctx context.Context, sessionID string, runID string) (*interrupter.AgentSnapshot, error) {
+	if a.checkpointStore == nil {
+		return nil, fmt.Errorf("checkpoint store not configured")
+	}
+	return a.checkpointStore.Load(ctx, runID)
+}
+
+// DeleteCheckpoint 删除指定 runID 的检查点
+func (a *Agent) DeleteCheckpoint(ctx context.Context, runID string) error {
+	if a.checkpointStore == nil {
+		return fmt.Errorf("checkpoint store not configured")
+	}
+	return a.checkpointStore.Delete(ctx, runID)
 }
