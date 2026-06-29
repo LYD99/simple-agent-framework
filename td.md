@@ -6,9 +6,9 @@
 
 ## 一、项目定位
 
-轻量级、可扩展的 Go 单 Agent 框架，支持 **ReAct / Plan-and-Execute** 策略、**HITL (Human-In-The-Loop)**、**多类型工具**（内置、注册函数、RAG、MCP、Skill、RunCode）、**沙箱运行时**（Local/Docker/E2B 云沙箱）、**可靠性保障**（死循环检测、动态上下文压缩、结构化错误反馈）和 **会话级隔离**（Agent 共享单例 + Session 独立状态）。
+轻量级、可扩展的 Go 单 Agent 框架，支持 **ReAct / Plan-and-Execute** 策略、**HITL (Human-In-The-Loop)**、**多类型工具**（内置、注册函数、RAG、MCP、Skill、RunCode）、**沙箱运行时**（Local/Docker/E2B 云沙箱）、**可靠性保障**（死循环检测、动态上下文压缩、结构化错误反馈、**Checkpoint/恢复**）和 **会话级隔离**（Agent 共享单例 + Session 独立状态）。
 
-设计借鉴 **Eino**(HITL checkpoint/resume)、**LangChainGo**(Chain/Agent/Executor 分层)、**tRPC-Agent-Go**(Session Memory + OTel)、**Swarm-go**(Handoff 模式)、**Codex**(Agent 共享配置 + Session 独立记忆) 中的成熟模式，保持 Go 惯用风格：小接口、`context.Context` 贯穿、functional options 配置、middleware/hook 可插拔。
+设计借鉴 **LangChainGo**(Chain/Agent/Executor 分层)、**tRPC-Agent-Go**(Session Memory + OTel)、**Swarm-go**(Handoff 模式)、**Codex**(Agent 共享配置 + Session 独立记忆) 中的成熟模式，保持 Go 惯用风格：小接口、`context.Context` 贯穿、functional options 配置、middleware/hook 可插拔。
 
 ---
 
@@ -174,7 +174,7 @@ github.com/LYD99/simple-agent-framework/
 ├── interrupter/               # HITL 中断控制
 │   ├── interrupter.go         # Interrupter interface
 │   ├── hitl.go                # HITLHandler 实现
-│   └── checkpoint.go          # 检查点 序列化/恢复
+│   └── checkpoint.go          # CheckpointStore + AgentSnapshot
 │
 ├── hook/                      # 钩子/中间件
 │   ├── hook.go                # Hook interface + HookManager
@@ -3094,23 +3094,90 @@ Agent Run
 ```
 Agent 运行中断时:
 
-1. 序列化 AgentSnapshot:
+1. 序列化 AgentSnapshot (精简版):
    ┌─────────────────────────┐
    │  AgentSnapshot          │
-   │  ├── LoopState          │
-   │  ├── Iteration          │
-   │  ├── Messages[]         │
-   │  ├── StepResults[]      │
-   │  ├── PendingAction      │
-   │  └── TokensUsed         │
+   │  ├── RunID              │  // 唯一标识
+   │  ├── Plan               │  // *planner.PlanResult (含 Action + Reasoning)
+   │  ├── StepResults[]      │  // []planner.StepResult (历史步骤)
+   │  ├── Iteration          │  // int (当前迭代次数)
+   │  └── State              │  // LoopState (状态机状态)
    └─────────────────────────┘
+   注意: ChatMessage 已由 Memory 独立持久化，不再重复存储
 
-2. 持久化到 CheckpointStore (内存 / 文件 / Redis)
+2. 持久化到 CheckpointStore (内存 / 文件 / Redis):
+   store.Save(ctx, runID, snapshot)
 
 3. 恢复时:
-   snapshot := store.Load(runID)
-   agent.Resume(ctx, snapshot, humanResponse)
+   snapshot := store.Load(ctx, runID)
+   // 重建 Session 状态: 从 snapshot 恢复 loopState, history 等
+   // Memory 中的 Messages 独立恢复
 ```
+
+**接口定义**
+
+```go
+// interrupter/checkpoint.go
+
+type AgentSnapshot struct {
+    RunID       string               `json:"run_id"`
+    Plan        *planner.PlanResult  `json:"plan,omitempty"`
+    StepResults []planner.StepResult `json:"step_results"`
+    Iteration   int                  `json:"iteration"`
+    State       LoopState            `json:"state"`
+}
+
+type CheckpointStore interface {
+    Save(ctx context.Context, runID string, snapshot *AgentSnapshot) error
+    Load(ctx context.Context, runID string) (*AgentSnapshot, error)
+    Delete(ctx context.Context, runID string) error
+}
+
+// MemoryStore (开发/测试用)
+type MemoryStore struct {
+    data map[string][]byte
+    mu   sync.RWMutex
+}
+```
+
+**Agent 层 API**
+
+```go
+// agent/agent.go
+
+func (a *Agent) Suspend(ctx context.Context, sessionID string, snapshot *AgentSnapshot) error
+func (a *Agent) Resume(ctx context.Context, sessionID string, runID string) (*AgentSnapshot, error)
+func (a *Agent) GetState(ctx context.Context, sessionID string, runID string) (*AgentSnapshot, error)
+func (a *Agent) DeleteCheckpoint(ctx context.Context, runID string) error
+```
+
+**Session 层 API**
+
+```go
+// agent/session.go
+
+func (s *Session) SaveCheckpoint(ctx context.Context, snapshot *AgentSnapshot) error
+func (s *Session) LoadCheckpoint(ctx context.Context, runID string) (*AgentSnapshot, error)
+func (s *Session) Suspend(ctx context.Context, snapshot *AgentSnapshot) error
+func (s *Session) Resume(ctx context.Context, runID string) (*AgentSnapshot, error)
+
+func WithCheckpoint(store CheckpointStore, autoSaveInterval time.Duration) SessionOption
+```
+
+**自动保存时机** (agent/loop.go)
+
+- `ctx.Done()` 触发时 - 客户端取消/超时
+- `StateInterrupt` 开始前 - HITL 介入
+- `StateExecuting` 开始前 - 工具执行前
+
+**关键设计原则**
+
+| 原则 | 说明 |
+|------|------|
+| **最小状态** | 只记录恢复必需的 5 个字段 |
+| **RunID 一维寻址** | 简化存储和检索，无需三维空间 |
+| **ChatMessage 独立持久化** | Memory 负责，Checkpoint 不重复 |
+| **异步保存** | 避免阻塞主流程 |
 
 ### 10.7 结构化错误提示
 

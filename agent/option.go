@@ -7,6 +7,7 @@ import (
 	"github.com/LYD99/simple-agent-framework/hook"
 	"github.com/LYD99/simple-agent-framework/interrupter"
 	"github.com/LYD99/simple-agent-framework/memory"
+	"github.com/LYD99/simple-agent-framework/metrics"
 	"github.com/LYD99/simple-agent-framework/model"
 	"github.com/LYD99/simple-agent-framework/planner"
 	"github.com/LYD99/simple-agent-framework/rule"
@@ -276,5 +277,13 @@ func WithCompressAgent(config CompressAgentConfig) AgentOption {
 func WithCheckpointStore(store interrupter.CheckpointStore) AgentOption {
 	return func(a *Agent) {
 		a.checkpointStore = store
+	}
+}
+
+func WithMetricsHandler(handler metrics.MetricsHandler, modelName string) AgentOption {
+	return func(a *Agent) {
+		if a.model != nil && handler != nil {
+			a.model = model.WrapWithMetrics(a.model, modelName, handler)
+		}
 	}
 }
